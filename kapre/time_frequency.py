@@ -335,3 +335,81 @@ d
                   'norm': self.norm}
         base_config = super(Melspectrogram, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+class MFCC(Melspectrogram):
+
+    def __init__(self, n_mfcc=20, trainable_dct=False, retain=None, **kwargs):
+
+        # super
+        super(MFCC, self).__init__(**kwargs)
+
+        # preprocessing
+        n_mfcc = int(n_mfcc)
+
+        # testing
+        assert n_mfcc > 0
+
+        # init
+        self.n_mfcc = n_mfcc
+        self.trainable_dct = trainable_dct
+        self.retain = retain if retain else n_mfcc
+
+    def build(self, input_shape):
+        # Create a trainable weight variable for this layer.
+
+        # super
+        super(MFCC, self).build(input_shape)
+
+        self.built = False
+
+        dct_basis = backend.dct(self.n_mfcc, self.n_mels)  # [n_mfcc, n_mels]
+        dct_basis = np.transpose(dct_basis)  # [n_mels, n_mfcc]
+        self.dct_basis = K.variable(dct_basis, dtype=K.floatx())
+
+        if self.trainable_dct:
+            self.trainable_weights.append(self.dct_basis)
+        else:
+            self.non_trainable_weights.append(self.dct_basis)
+        self.built = True
+
+    def call(self, x):
+
+        # super
+        x = super(MFCC, self).call(x)
+
+        if self.image_data_format == 'channels_first':
+            # input is [batch, n_ch, n_mels, n_time]
+            x = K.permute_dimensions(x, [0, 1, 3, 2])
+        else:
+            # input is [batch, n_mels, n_time, n_ch]
+            x = K.permute_dimensions(x, [0, 3, 2, 1])
+
+        #now [batch, n_ch, n_time, n_mels]
+
+        mfcc = K.dot(x, self.dct_basis)
+
+        if self.image_data_format == 'channels_first':
+            output = K.permute_dimensions(mfcc, [0, 1, 3, 2])
+        else:
+            output = K.permute_dimensions(mfcc, [0, 3, 2, 1])
+
+        return output
+
+    def compute_output_shape(self, input_shape):
+
+        if self.image_data_format == 'channels_first':
+            return (input_shape[0], self.n_ch, self.n_mfcc, self.n_frame)
+        else:
+            return (input_shape[0], self.n_mfcc, self.n_frame, self.n_ch)
+
+    def get_config(self):
+
+        config = {
+            "n_mfcc": self.n_mfcc,
+            "trainable_dct": self.trainable_dct,
+            "retain": self.retain
+        }
+
+        base_config = super(MFCC, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+

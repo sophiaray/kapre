@@ -5,6 +5,7 @@ from keras.engine import Layer
 from keras import backend as K
 from . import backend
 from . import backend_keras
+import tensorflow as tf
 
 
 class AmplitudeToDB(Layer):
@@ -146,3 +147,47 @@ class Normalization2D(Layer):
                   'image_data_format': self.image_data_format}
         base_config = super(Normalization2D, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+class DeltaDelta(Layer):
+    '''
+    Layer that appends deltas as an extra channel
+    '''
+
+    def __init__(self, n=2, **kwargs):
+        self.n = n
+        super(DeltaDelta, self).__init__(**kwargs)
+
+    def compute_output_shape(self, input_shape):
+        # if self.image_data_format == 'channels_first':
+        #     return input_shape[0], input_shape[1] + 2, input_shape[2], input_shape[3]
+        # else:
+        return input_shape[0], input_shape[1], input_shape[2], input_shape[3] + 2
+
+    def build(self, input_shape):
+
+        delta_kernel = np.arange(-self.n, self.n + 1
+                                 ).reshape((1, 2 * self.n + 1, 1, 1))
+        delta_kernel = delta_kernel/(2*sum(np.arange(self.n+1)**2))
+
+        self.delta_kernel = K.variable(delta_kernel, dtype=K.floatx())
+
+        self.non_trainable_weights.append(self.delta_kernel)
+        self.paddings = K.constant([[0,0], [0, 0], [self.n, self.n], [0,0]], dtype="int32")
+        super(DeltaDelta, self).build(input_shape)
+        # self.built = True
+
+    def call(self, x, mask=None):
+
+        x_pad = tf.pad(x, self.paddings)
+        delta = K.conv2d(x_pad, self.delta_kernel, data_format="channels_last")
+        delta_pad = tf.pad(delta, self.paddings)
+        delta_delta = K.conv2d(delta_pad, self.delta_kernel,
+                               data_format="channels_last")
+
+        return K.concatenate((x, delta, delta_delta), axis=-1)
+
+    def get_config(self):
+        config = {'n': self.n}
+        base_config = super(DeltaDelta, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+

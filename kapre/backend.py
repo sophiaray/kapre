@@ -150,3 +150,18 @@ def filterbank_log(sr, n_freq, n_bins=84, bins_per_octave=12,
     basis = librosa.util.normalize(basis, norm=1, axis=1)
 
     return basis.astype(K.floatx())
+
+def dct(n_filters, n_input):
+    """ Discrete Cosine Transform basis from librosa
+    """
+
+    basis = np.empty((n_filters, n_input))
+    basis[0, :] = 1.0 / np.sqrt(n_input)
+
+    samples = np.arange(1, 2 * n_input, 2) * np.pi / (2.0 * n_input)
+
+    for i in range(1, n_filters):
+        basis[i, :] = np.cos(i * samples) * np.sqrt(2.0 / n_input)
+
+    return basis
+
